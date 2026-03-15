@@ -12,6 +12,7 @@ import {
   proposeCalendarTools,
   CALENDAR_WRITE_TOOLS_DISABLED,
 } from "@/lib/propose-calendar-tools";
+import { saveMessages } from "@/lib/chat-store";
 
 const composio = new Composio({ provider: new VercelProvider() });
 
@@ -19,7 +20,7 @@ const NAVIGATOR_SYSTEM_PROMPT = `You are a healthcare navigation assistant for A
 
 When the navigator asks to send an email: use ONLY GMAIL_CREATE_EMAIL_DRAFT. Do not send the email yourself. Tell the navigator the draft is ready for review in the chat; they must approve it before it is sent.
 
-When the navigator asks for a calendar summary, upcoming events, schedule, or event list: use **Google Calendar** tools only (e.g. GOOGLECALENDAR_LIST_EVENTS, GOOGLECALENDAR_LIST_UPCOMING_EVENTS, or list calendars). Do **not** use Gmail or email tools for calendar requests. If a calendar tool fails or returns an error, say that the calendar could not be loaded or there was a problem with the calendar—never say "no emails" when the request was about calendar.
+When the navigator asks to "check the calendar", "see the calendar", "what's on the calendar", "upcoming events", "schedule", or any request about calendar *events*: you MUST use **GOOGLECALENDAR_LIST_EVENTS** or **GOOGLECALENDAR_LIST_UPCOMING_EVENTS** (or the tool that lists events within a calendar). Use calendarId "primary" (or the user's primary calendar) and a sensible time range (e.g. timeMin/timeMax for this week or today). Do **not** use GOOGLECALENDAR_LIST_CALENDARS for these requests—that tool only returns a list of calendar *names*, not events. Use LIST_CALENDARS only when the user explicitly asks "which calendars do I have" or "list my calendars". Do not use Gmail or email tools for calendar requests. If a calendar tool fails or returns an error, say that the calendar could not be loaded or there was a problem with the calendar—never say "no emails" when the request was about calendar.
 
 When adding, changing, or deleting calendar events: use only the PROPOSE_CALENDAR_CREATE, PROPOSE_CALENDAR_UPDATE, PROPOSE_CALENDAR_PATCH, or PROPOSE_CALENDAR_DELETE tools. Do not use the real calendar write tools. Tell the navigator the change is ready for review and must be approved before it is applied.
 
@@ -35,7 +36,9 @@ export async function POST(req: Request) {
   try {
     const patientId =
       new URL(req.url).searchParams.get("patientId") ?? "user_123";
-    const { messages }: { messages: UIMessage[] } = await req.json();
+    const body = await req.json();
+    const messages = body.messages as UIMessage[];
+    const chatId = (body.id ?? body.chatId) as string | undefined;
 
     const session = await composio.create(patientId, {
       manageConnections: false,
@@ -59,6 +62,11 @@ export async function POST(req: Request) {
     return result.toUIMessageStreamResponse({
       originalMessages: messages,
       generateMessageId: () => generateId(),
+      onFinish: chatId
+        ? ({ messages: finishedMessages }) => {
+            saveMessages(chatId, finishedMessages);
+          }
+        : undefined,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to get response";

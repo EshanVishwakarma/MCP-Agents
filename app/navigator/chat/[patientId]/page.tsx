@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
+import type { UIMessage } from "ai";
 import { ArulHealthText } from "@/components/ArulHealthText";
 import { CalendarApprovalCard } from "@/components/CalendarApprovalCard";
 import { EmailDraftCard } from "@/components/EmailDraftCard";
 import { ToolCallDisplay } from "@/components/ToolCallDisplay";
+
+type ChatThread = { id: string; patientId: string; createdAt: string; title?: string };
 
 type ToolPart = {
   type: string;
@@ -95,11 +98,19 @@ function getCalendarPendingFromResult(
   return { action, params: params as Record<string, unknown> };
 }
 
-export default function NavigatorChatPage() {
-  const params = useParams();
-  const patientId = params.patientId as string;
+function ChatView({
+  threadId,
+  initialMessages,
+  patientId,
+}: {
+  threadId: string;
+  initialMessages: UIMessage[];
+  patientId: string;
+}) {
   const [input, setInput] = useState("");
   const { messages, sendMessage, status, error } = useChat({
+    id: threadId,
+    messages: initialMessages,
     transport: new DefaultChatTransport({
       api: `/api/chat?patientId=${encodeURIComponent(patientId)}`,
     }),
@@ -115,25 +126,7 @@ export default function NavigatorChatPage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col max-w-2xl mx-auto px-4 py-6">
-      <header className="mb-6 flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-4">
-          <ArulHealthText href="/navigator" size="sm" />
-          <Link
-            href="/navigator"
-            className="text-sm text-arul-purple hover:underline font-medium"
-          >
-            ← Dashboard
-          </Link>
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-arul-forest">Chat (patient)</h1>
-          <p className="text-sm text-stone-500 mt-0.5 font-mono">
-            {patientId.slice(0, 8)}…
-          </p>
-        </div>
-      </header>
-
+    <>
       <div className="flex-1 space-y-4 overflow-y-auto">
         {messages.length === 0 && (
           <div className="rounded-xl border border-arul-purple/20 bg-arul-purple/5 p-6 text-center">
@@ -387,6 +380,162 @@ export default function NavigatorChatPage() {
           Send
         </button>
       </form>
+    </>
+  );
+}
+
+export default function NavigatorChatPage() {
+  const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const patientId = params.patientId as string;
+  const threadId = searchParams.get("threadId");
+
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [threadsLoading, setThreadsLoading] = useState(true);
+  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(!!threadId);
+
+  const loadThreads = useCallback(async () => {
+    if (!patientId) return;
+    setThreadsLoading(true);
+    try {
+      const res = await fetch(`/api/chat/threads?patientId=${encodeURIComponent(patientId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setThreads(data);
+      }
+    } finally {
+      setThreadsLoading(false);
+    }
+  }, [patientId]);
+
+  useEffect(() => {
+    loadThreads();
+  }, [loadThreads]);
+
+  useEffect(() => {
+    if (!threadId) {
+      setInitialMessages([]);
+      setMessagesLoading(false);
+      return;
+    }
+    setMessagesLoading(true);
+    let cancelled = false;
+    fetch(`/api/chat/threads/${encodeURIComponent(threadId)}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed to load"))))
+      .then((data: { messages: UIMessage[] }) => {
+        if (!cancelled) {
+          setInitialMessages(data.messages ?? []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setInitialMessages([]);
+      })
+      .finally(() => {
+        if (!cancelled) setMessagesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId]);
+
+  const startNewChat = async () => {
+    try {
+      const res = await fetch("/api/chat/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patientId }),
+      });
+      if (!res.ok) return;
+      const thread = (await res.json()) as ChatThread;
+      await loadThreads();
+      router.push(`/navigator/chat/${patientId}?threadId=${thread.id}`);
+    } catch {
+      // ignore
+    }
+  };
+
+  const chatHref = (tid: string) => `/navigator/chat/${patientId}?threadId=${tid}`;
+
+  return (
+    <main className="min-h-screen flex">
+      <aside className="w-56 shrink-0 border-r border-stone-200 bg-stone-50/50 flex flex-col">
+        <div className="p-3 border-b border-stone-200">
+          <Link href="/navigator" className="text-sm text-arul-purple hover:underline font-medium">
+            ← Dashboard
+          </Link>
+        </div>
+        <div className="p-2">
+          <button
+            type="button"
+            onClick={startNewChat}
+            className="w-full py-2 px-3 text-left text-sm font-medium text-arul-forest bg-arul-purple/10 hover:bg-arul-purple/20 rounded-lg transition-colors"
+          >
+            + New chat
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2">
+          {threadsLoading ? (
+            <p className="text-xs text-stone-500">Loading…</p>
+          ) : threads.length === 0 ? (
+            <p className="text-xs text-stone-500">No conversations yet</p>
+          ) : (
+            <ul className="space-y-0.5">
+              {threads.map((t) => (
+                <li key={t.id}>
+                  <Link
+                    href={chatHref(t.id)}
+                    className={`block py-2 px-3 rounded-lg text-sm truncate ${
+                      t.id === threadId
+                        ? "bg-arul-purple/20 text-arul-purple-dark font-medium"
+                        : "text-arul-forest hover:bg-stone-200/80"
+                    }`}
+                  >
+                    {t.title ?? "New chat"}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </aside>
+
+      <div className="flex-1 flex flex-col min-w-0 max-w-2xl mx-auto w-full px-4 py-6">
+        <header className="mb-6 flex flex-col gap-3">
+          <ArulHealthText href="/navigator" size="sm" />
+          <div>
+            <h1 className="text-xl font-semibold text-arul-forest">Chat (patient)</h1>
+            <p className="text-sm text-stone-500 mt-0.5 font-mono">{patientId.slice(0, 8)}…</p>
+          </div>
+        </header>
+
+        {!threadId ? (
+          <div className="flex-1 rounded-xl border border-arul-purple/20 bg-arul-purple/5 p-8 text-center">
+            <p className="text-arul-forest/90 mb-4">
+              Select a conversation from the sidebar or start a new chat.
+            </p>
+            <button
+              type="button"
+              onClick={startNewChat}
+              className="px-4 py-2 bg-arul-purple text-white font-medium rounded-lg hover:bg-arul-purple-dark transition-colors"
+            >
+              New chat
+            </button>
+          </div>
+        ) : messagesLoading ? (
+          <div className="flex-1 flex items-center justify-center text-stone-500 text-sm">
+            Loading conversation…
+          </div>
+        ) : (
+          <ChatView
+            key={threadId}
+            threadId={threadId}
+            initialMessages={initialMessages}
+            patientId={patientId}
+          />
+        )}
+      </div>
     </main>
   );
 }
