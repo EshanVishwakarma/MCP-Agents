@@ -6,7 +6,7 @@ A Next.js chat app that helps people navigate healthcare using an AI assistant w
 
 - Node.js 18+ (or [Bun](https://bun.sh))
 - [Composio API key](https://platform.composio.dev/settings)
-- [Anthropic API key](https://console.anthropic.com/) (for Claude)
+- [GEMINI API key]
 
 ## Setup
 
@@ -27,7 +27,6 @@ A Next.js chat app that helps people navigate healthcare using an AI assistant w
    Edit `.env.local` and set:
 
    - `COMPOSIO_API_KEY` — from [Composio Settings](https://platform.composio.dev/settings)
-   - `ANTHROPIC_API_KEY` — from [Anthropic Console](https://console.anthropic.com/)
 
    Do not commit `.env.local`; it is gitignored.
 
@@ -50,7 +49,6 @@ The assistant can connect apps (Gmail, Google Calendar, etc.) via in-chat OAuth 
 ## Stack
 
 - **Next.js** (App Router)
-- **Vercel AI SDK** (`ai`, `@ai-sdk/react`) + **Anthropic** (`@ai-sdk/anthropic`)
 - **Composio** (`@composio/core`, `@composio/vercel`) for tool discovery, auth, and execution
 
 ## Security
