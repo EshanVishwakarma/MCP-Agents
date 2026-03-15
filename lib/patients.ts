@@ -7,5 +7,6 @@ export {
   createPatient,
   getPatient,
   listPatients,
+  updatePatient,
   type Patient,
 } from "./store";

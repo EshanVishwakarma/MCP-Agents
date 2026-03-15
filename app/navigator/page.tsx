@@ -18,6 +18,8 @@ export default function NavigatorDashboard() {
   const [addName, setAddName] = useState("");
   const [adding, setAdding] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,6 +68,34 @@ export default function NavigatorDashboard() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const startEditName = (p: Patient) => {
+    setEditingId(p.id);
+    setEditingName(p.displayName ?? "");
+  };
+
+  const saveEditName = async (patientId: string) => {
+    if (editingId !== patientId) return;
+    try {
+      const res = await fetch(`/api/patients/${patientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: editingName.trim() || undefined }),
+      });
+      if (res.ok) {
+        setEditingId(null);
+        setEditingName("");
+        await load();
+      }
+    } catch {
+      setEditingId(null);
+    }
+  };
+
+  const cancelEditName = () => {
+    setEditingId(null);
+    setEditingName("");
+  };
+
   return (
     <main className="min-h-screen max-w-3xl mx-auto px-4 py-8">
       <header className="mb-8">
@@ -83,8 +113,8 @@ export default function NavigatorDashboard() {
           type="text"
           value={addName}
           onChange={(e) => setAddName(e.target.value)}
-          placeholder="Patient name (optional)"
-          className="flex-1 p-3 border border-arul-teal/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-arul-teal/50"
+          placeholder="Patient name"
+          className="flex-1 p-3 border border-arul-purple/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-arul-purple/50"
         />
         <button
           type="submit"
@@ -107,11 +137,45 @@ export default function NavigatorDashboard() {
               className="rounded-xl border border-arul-purple/20 bg-white p-4 shadow-sm"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <span className="font-medium text-arul-forest">
-                    {p.displayName || "Patient"}
-                  </span>
-                  <span className="text-xs text-stone-400 ml-2 font-mono">
+                <div className="flex items-center gap-2 min-w-0">
+                  {editingId === p.id ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        onBlur={() => saveEditName(p.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEditName(p.id);
+                          if (e.key === "Escape") cancelEditName();
+                        }}
+                        placeholder="Patient name"
+                        className="flex-1 min-w-0 p-2 border border-arul-purple/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-arul-purple/50"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={cancelEditName}
+                        className="text-xs text-stone-500 hover:text-stone-700"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-medium text-arul-forest">
+                        {p.displayName || "Patient"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => startEditName(p)}
+                        className="text-xs text-arul-purple hover:underline"
+                      >
+                        Edit name
+                      </button>
+                    </>
+                  )}
+                  <span className="text-xs text-stone-400 font-mono shrink-0">
                     {p.id.slice(0, 8)}…
                   </span>
                 </div>
@@ -123,6 +187,12 @@ export default function NavigatorDashboard() {
                   >
                     {copiedId === p.id ? "Copied" : "Copy link"}
                   </button>
+                  <Link
+                    href={`/navigator/patient/${p.id}/flows`}
+                    className="rounded-lg border border-arul-purple/40 px-3 py-1.5 text-sm text-arul-purple hover:bg-arul-purple/10 transition-colors"
+                  >
+                    Flows
+                  </Link>
                   <Link
                     href={`/navigator/chat/${p.id}`}
                     className="rounded-lg bg-arul-purple px-4 py-2 text-sm font-medium text-white hover:bg-arul-purple-dark transition-colors"

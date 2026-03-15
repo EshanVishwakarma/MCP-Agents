@@ -12,6 +12,18 @@ export type Patient = {
   createdAt: string;
 };
 
+export type FlowSchedule = "morning" | "evening" | "daily";
+
+export type Flow = {
+  id: string;
+  patientId: string;
+  name: string;
+  schedule: FlowSchedule;
+  instructions: string;
+  enabled: boolean;
+  createdAt: string;
+};
+
 export type Navigator = {
   id: string;
   email: string;
@@ -22,9 +34,10 @@ export type Navigator = {
 type Store = {
   patients: Patient[];
   navigators: Navigator[];
+  flows: Flow[];
 };
 
-const defaultStore: Store = { patients: [], navigators: [] };
+const defaultStore: Store = { patients: [], navigators: [], flows: [] };
 
 function getDataDir(): string {
   const dir =
@@ -66,6 +79,7 @@ function readStore(): Store {
     return {
       patients: Array.isArray(data.patients) ? data.patients : [],
       navigators: Array.isArray(data.navigators) ? data.navigators : [],
+      flows: Array.isArray(data.flows) ? data.flows : [],
     };
   } catch {
     return { ...defaultStore };
@@ -110,6 +124,96 @@ export function listPatients(): Patient[] {
   return [...patients].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
+}
+
+export async function updatePatient(
+  id: string,
+  updates: { displayName?: string }
+): Promise<Patient | null> {
+  return withLock((store) => {
+    const idx = store.patients.findIndex((p) => p.id === id);
+    if (idx === -1) return { store, result: null };
+    const patient = store.patients[idx];
+    const updated: Patient = {
+      ...patient,
+      ...(updates.displayName !== undefined && {
+        displayName: updates.displayName.trim() || undefined,
+      }),
+    };
+    const patients = [...store.patients];
+    patients[idx] = updated;
+    return { store: { ...store, patients }, result: updated };
+  });
+}
+
+export async function createFlow(flow: {
+  patientId: string;
+  name: string;
+  schedule: Flow["schedule"];
+  instructions: string;
+}): Promise<Flow> {
+  return withLock((store) => {
+    const newFlow: Flow = {
+      id: crypto.randomUUID(),
+      patientId: flow.patientId,
+      name: flow.name.trim(),
+      schedule: flow.schedule,
+      instructions: flow.instructions.trim(),
+      enabled: true,
+      createdAt: new Date().toISOString(),
+    };
+    const flows = [newFlow, ...store.flows];
+    return { store: { ...store, flows }, result: newFlow };
+  });
+}
+
+export function getFlowsByPatient(patientId: string): Flow[] {
+  return readStore().flows
+    .filter((f) => f.patientId === patientId)
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+}
+
+export function getFlow(id: string): Flow | undefined {
+  return readStore().flows.find((f) => f.id === id);
+}
+
+export function getAllFlows(): Flow[] {
+  return readStore().flows;
+}
+
+export async function updateFlow(
+  id: string,
+  updates: Partial<Pick<Flow, "name" | "schedule" | "instructions" | "enabled">>
+): Promise<Flow | null> {
+  return withLock((store) => {
+    const idx = store.flows.findIndex((f) => f.id === id);
+    if (idx === -1) return { store, result: null };
+    const flow = store.flows[idx];
+    const updated: Flow = {
+      ...flow,
+      ...(updates.name !== undefined && { name: updates.name.trim() }),
+      ...(updates.schedule !== undefined && { schedule: updates.schedule }),
+      ...(updates.instructions !== undefined && {
+        instructions: updates.instructions.trim(),
+      }),
+      ...(updates.enabled !== undefined && { enabled: updates.enabled }),
+    };
+    const flows = [...store.flows];
+    flows[idx] = updated;
+    return { store: { ...store, flows }, result: updated };
+  });
+}
+
+export async function deleteFlow(id: string): Promise<boolean> {
+  return withLock((store) => {
+    const idx = store.flows.findIndex((f) => f.id === id);
+    if (idx === -1) return { store, result: false };
+    const flows = store.flows.filter((f) => f.id !== id);
+    return { store: { ...store, flows }, result: true };
+  });
 }
 
 export function getNavigatorByEmail(email: string): Navigator | undefined {

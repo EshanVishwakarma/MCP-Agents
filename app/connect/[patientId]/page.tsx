@@ -13,7 +13,12 @@ const RECOMMENDED_SLUGS = [
   "notion",
 ];
 
-type Toolkit = { slug: string; name: string; connected: boolean };
+type Toolkit = {
+  slug: string;
+  name: string;
+  connected: boolean;
+  accountLabel?: string;
+};
 
 export default function ConnectPage() {
   const params = useParams();
@@ -90,11 +95,18 @@ export default function ConnectPage() {
             key={t.slug}
             className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-arul-purple/20 bg-white px-4 py-3"
           >
-            <span className="font-medium text-arul-forest text-base pt-0.5 sm:pt-0">
-              {t.name}
-            </span>
+            <div className="min-w-0 flex-1 pt-0.5 sm:pt-0">
+              <span className="font-medium text-arul-forest text-base block">
+                {t.name}
+              </span>
+              {t.connected && (
+                <span className="text-sm text-stone-500 mt-0.5 block truncate" title={t.accountLabel ?? "Connected to your account"}>
+                  {t.accountLabel ?? "Connected to your account"}
+                </span>
+              )}
+            </div>
             {t.connected ? (
-              <span className="text-sm text-green-600 font-medium sm:self-center">
+              <span className="text-sm text-green-600 font-medium sm:self-center shrink-0">
                 Connected
               </span>
             ) : (
