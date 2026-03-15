@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArulLogo } from "@/components/ArulLogo";
+import { ArulHealthText } from "@/components/ArulHealthText";
 
 const RECOMMENDED_SLUGS = [
   "gmail",
@@ -56,9 +56,9 @@ export default function ConnectPage() {
   return (
     <main className="min-h-screen flex flex-col max-w-2xl mx-auto px-4 py-6 sm:py-8 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
       <header className="mb-6 sm:mb-8">
-        <Link href="/" className="inline-block mb-6">
-          <ArulLogo height={28} />
-        </Link>
+        <div className="mb-6">
+          <ArulHealthText href="/" size="sm" />
+        </div>
         <h1 className="text-xl sm:text-2xl font-semibold text-arul-forest leading-tight">
           Connect your accounts
         </h1>

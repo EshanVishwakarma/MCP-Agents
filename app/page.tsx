@@ -1,15 +1,14 @@
 import Link from "next/link";
-import { ArulLogo } from "@/components/ArulLogo";
+import { ArulHealthText } from "@/components/ArulHealthText";
 
 export default function Home() {
   return (
     <main className="min-h-screen flex flex-col bg-stone-50">
-      <header className="bg-black px-4 py-6 sm:px-6 sm:py-8">
-        <div className="max-w-4xl mx-auto flex justify-center sm:justify-start">
-          <ArulLogo href="/" height={36} priority />
+      <header className="px-4 py-6 sm:px-6 sm:py-8 border-b border-stone-200/80">
+        <div className="max-w-4xl mx-auto">
+          <ArulHealthText href="/" size="lg" />
         </div>
       </header>
-
       <section className="flex-1 flex flex-col items-center justify-center px-4 py-16 sm:py-24">
         <div className="text-center max-w-2xl">
           <h1 className="text-2xl sm:text-3xl font-semibold text-arul-forest tracking-tight">

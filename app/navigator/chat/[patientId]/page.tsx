@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { ArulLogo } from "@/components/ArulLogo";
+import { ArulHealthText } from "@/components/ArulHealthText";
 import { ToolCallDisplay } from "@/components/ToolCallDisplay";
 
 type ToolPart = {
@@ -48,9 +48,7 @@ export default function NavigatorChatPage() {
     <main className="min-h-screen flex flex-col max-w-2xl mx-auto px-4 py-6">
       <header className="mb-6 flex flex-col gap-3">
         <div className="flex items-center justify-between gap-4">
-          <Link href="/navigator" className="inline-block">
-            <ArulLogo height={28} />
-          </Link>
+          <ArulHealthText href="/navigator" size="sm" />
           <Link
             href="/navigator"
             className="text-sm text-arul-purple hover:underline font-medium"

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArulLogo } from "@/components/ArulLogo";
+import { ArulHealthText } from "@/components/ArulHealthText";
 
 type Connection = { slug: string; name: string; connected: boolean };
 type Patient = {
@@ -69,9 +69,9 @@ export default function NavigatorDashboard() {
   return (
     <main className="min-h-screen max-w-3xl mx-auto px-4 py-8">
       <header className="mb-8">
-        <Link href="/" className="inline-block mb-6">
-          <ArulLogo height={32} />
-        </Link>
+        <div className="mb-6">
+          <ArulHealthText href="/" size="md" />
+        </div>
         <h1 className="text-xl font-semibold text-arul-forest">Navigator Dashboard</h1>
         <p className="text-stone-600 mt-1 text-sm">
           Manage patients and chat on their behalf using their connected accounts.
