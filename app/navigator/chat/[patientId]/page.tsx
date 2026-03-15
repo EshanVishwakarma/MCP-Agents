@@ -6,6 +6,8 @@ import { useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { ArulHealthText } from "@/components/ArulHealthText";
+import { CalendarApprovalCard } from "@/components/CalendarApprovalCard";
+import { EmailDraftCard } from "@/components/EmailDraftCard";
 import { ToolCallDisplay } from "@/components/ToolCallDisplay";
 
 type ToolPart = {
@@ -23,6 +25,36 @@ function isToolPart(part: { type: string }): part is ToolPart {
 
 function getToolNameFromPart(part: ToolPart): string {
   return part.type.replace(/^tool-/, "");
+}
+
+function getDraftIdFromResult(result: unknown): string | null {
+  if (result == null || typeof result !== "object") return null;
+  const r = result as Record<string, unknown>;
+  const id = r.draft_id ?? r.id;
+  if (typeof id === "string" && id.length > 0) return id;
+  const data = r.data;
+  if (data != null && typeof data === "object") {
+    const d = data as Record<string, unknown>;
+    const dataId = d.draft_id ?? d.id;
+    if (typeof dataId === "string" && dataId.length > 0) return dataId;
+  }
+  return null;
+}
+
+const PROPOSE_CALENDAR_TOOLS = ["PROPOSE_CALENDAR_CREATE", "PROPOSE_CALENDAR_UPDATE", "PROPOSE_CALENDAR_PATCH", "PROPOSE_CALENDAR_DELETE"] as const;
+type CalendarAction = "create" | "update" | "patch" | "delete";
+
+function getCalendarPendingFromResult(
+  toolName: string,
+  result: unknown
+): { action: CalendarAction; params: Record<string, unknown> } | null {
+  if (result == null || typeof result !== "object") return null;
+  const r = result as Record<string, unknown>;
+  const type = r.type;
+  if (type !== "pending_calendar_create" && type !== "pending_calendar_update" && type !== "pending_calendar_patch" && type !== "pending_calendar_delete") return null;
+  const action: CalendarAction = type.replace("pending_calendar_", "") as CalendarAction;
+  const { type: _t, ...params } = r;
+  return { action, params: params as Record<string, unknown> };
 }
 
 export default function NavigatorChatPage() {
@@ -129,6 +161,45 @@ export default function NavigatorChatPage() {
                     const inv = (part as { toolInvocation: { toolName?: string; state?: string; args?: unknown; result?: unknown; toolCallId?: string } }).toolInvocation;
                     const name = inv.toolName ?? "tool";
                     const loading = inv.state !== "result";
+                    const isEmailDraft = name === "GMAIL_CREATE_EMAIL_DRAFT";
+                    const draftId = !loading && isEmailDraft ? getDraftIdFromResult(inv.result) : null;
+                    if (isEmailDraft && draftId && patientId) {
+                      return (
+                        <div key={inv.toolCallId ?? `tool-${i}`} className="w-full">
+                          <ToolCallDisplay
+                            toolName={name}
+                            input={inv.args}
+                            output={inv.result}
+                            isLoading={false}
+                          />
+                          <EmailDraftCard
+                            patientId={patientId}
+                            draftId={draftId}
+                            args={inv.args ?? {}}
+                          />
+                        </div>
+                      );
+                    }
+                    const calendarPending = !loading && PROPOSE_CALENDAR_TOOLS.includes(name as (typeof PROPOSE_CALENDAR_TOOLS)[number])
+                      ? getCalendarPendingFromResult(name, inv.result)
+                      : null;
+                    if (calendarPending && patientId) {
+                      return (
+                        <div key={inv.toolCallId ?? `tool-${i}`} className="w-full">
+                          <ToolCallDisplay
+                            toolName={name}
+                            input={inv.args}
+                            output={inv.result}
+                            isLoading={false}
+                          />
+                          <CalendarApprovalCard
+                            patientId={patientId}
+                            action={calendarPending.action}
+                            params={calendarPending.params}
+                          />
+                        </div>
+                      );
+                    }
                     return (
                       <ToolCallDisplay
                         key={inv.toolCallId ?? `tool-${i}`}
@@ -145,6 +216,45 @@ export default function NavigatorChatPage() {
                     const loading =
                       toolPart.state !== "output-available" &&
                       toolPart.state !== "output-error";
+                    const isEmailDraftLegacy = name === "GMAIL_CREATE_EMAIL_DRAFT";
+                    const draftIdLegacy = !loading && isEmailDraftLegacy ? getDraftIdFromResult(toolPart.output) : null;
+                    if (isEmailDraftLegacy && draftIdLegacy && patientId) {
+                      return (
+                        <div key={toolPart.toolCallId ?? i} className="w-full">
+                          <ToolCallDisplay
+                            toolName={name}
+                            input={toolPart.input}
+                            output={toolPart.output}
+                            isLoading={false}
+                          />
+                          <EmailDraftCard
+                            patientId={patientId}
+                            draftId={draftIdLegacy}
+                            args={toolPart.input ?? {}}
+                          />
+                        </div>
+                      );
+                    }
+                    const calendarPendingLegacy = !loading && PROPOSE_CALENDAR_TOOLS.includes(name as (typeof PROPOSE_CALENDAR_TOOLS)[number])
+                      ? getCalendarPendingFromResult(name, toolPart.output)
+                      : null;
+                    if (calendarPendingLegacy && patientId) {
+                      return (
+                        <div key={toolPart.toolCallId ?? i} className="w-full">
+                          <ToolCallDisplay
+                            toolName={name}
+                            input={toolPart.input}
+                            output={toolPart.output}
+                            isLoading={false}
+                          />
+                          <CalendarApprovalCard
+                            patientId={patientId}
+                            action={calendarPendingLegacy.action}
+                            params={calendarPendingLegacy.params}
+                          />
+                        </div>
+                      );
+                    }
                     return (
                       <ToolCallDisplay
                         key={toolPart.toolCallId ?? i}

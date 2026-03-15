@@ -8,7 +8,7 @@ const slugNorm = (s: string) => s.toLowerCase().replace(/_/g, "");
 
 /** Resolve a human-readable label by calling the provider (Gmail / Google Calendar) so we show which account is connected. */
 async function resolveAccountLabel(
-  session: Awaited<ReturnType<Composio["create"]>>,
+  session: { execute: (slug: string, params: Record<string, unknown>) => Promise<unknown> },
   slug: string
 ): Promise<string | undefined> {
   const norm = slugNorm(slug);
