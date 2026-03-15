@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Arul Health brand – aligned with arulhealth.com */
+  --arul-teal: #0d9488;
+  --arul-teal-dark: #0f766e;
+  --arul-navy: #134e4a;
+  --arul-mint: #99f6e4;
+  --arul-purple: #7c3aed;
+  --arul-purple-dark: #6d28d9;
+  --arul-forest: #14532d;
+  --arul-forest-light: #166534;
+}
+
+body {
+  @apply bg-stone-50 text-stone-900 antialiased;
+}
