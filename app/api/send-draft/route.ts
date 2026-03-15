@@ -19,6 +19,7 @@ export async function POST(req: Request) {
 
     const session = await composio.create(patientId, {
       manageConnections: false,
+      toolkits: ["gmail", "googlecalendar"],
     });
     await session.execute("GMAIL_SEND_DRAFT", {
       draft_id: draftId,

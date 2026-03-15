@@ -24,6 +24,7 @@ export async function GET(
   try {
     const session = await composio.create(patientId, {
       manageConnections: false,
+      toolkits: ["gmail", "googlecalendar"],
     });
     const baseUrl = getBaseUrl(req);
     const callbackUrl = `${baseUrl}/api/connect/${patientId}/callback`;

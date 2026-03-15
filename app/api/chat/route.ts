@@ -19,7 +19,15 @@ const NAVIGATOR_SYSTEM_PROMPT = `You are a healthcare navigation assistant for A
 
 When the navigator asks to send an email: use ONLY GMAIL_CREATE_EMAIL_DRAFT. Do not send the email yourself. Tell the navigator the draft is ready for review in the chat; they must approve it before it is sent.
 
-When adding, changing, or deleting calendar events: use only the PROPOSE_CALENDAR_CREATE, PROPOSE_CALENDAR_UPDATE, PROPOSE_CALENDAR_PATCH, or PROPOSE_CALENDAR_DELETE tools. Do not use the real calendar write tools. Tell the navigator the change is ready for review and must be approved before it is applied.`;
+When adding, changing, or deleting calendar events: use only the PROPOSE_CALENDAR_CREATE, PROPOSE_CALENDAR_UPDATE, PROPOSE_CALENDAR_PATCH, or PROPOSE_CALENDAR_DELETE tools. Do not use the real calendar write tools. Tell the navigator the change is ready for review and must be approved before it is applied.
+
+When you have fetched emails or calendar data via tools: do not list the items in your reply. Say one short line only (e.g. "Here are your recent emails" or "Here's the calendar for this week"). The tool result will show the formatted list in boxes; do not duplicate that content in prose.
+
+After you have called a tool to fetch emails or calendar events, respond with exactly one brief sentence and do not call any more tools for this request. Do not search again or execute additional tools.
+
+When fetching the patient's emails (Gmail fetch/list tools): (1) Always request 15 recent emails—use the tool's max_results, maxResults, or limit parameter set to 15. (2) Use query "in:inbox" to get recent mail from the whole inbox. Do not use "category:primary" unless the user explicitly asks for Primary only—many accounts (e.g. university or work) have most mail in other tabs, so requiring Primary often returns no results; "in:inbox" ensures we show recent mail from all inbox categories.
+
+Handle free-form requests by translating the user's intent into the Gmail query. When the navigator asks for emails matching a theme (e.g. medical, doctors, hospitals, from a specific provider, appointment reminders, insurance), add relevant search terms to the query parameter so the fetch returns matching mail. Examples: "medical" or "doctor" or "hospital" or "health" or "appointment" or "patient" for care-related mail; combine with "in:inbox" if needed (e.g. "in:inbox medical" or "in:inbox doctor hospital"). Do not respond that no emails were found unless the tool actually returned no messages—use a query that reflects what the user asked for so the tool can search their inbox.`;
 
 export async function POST(req: Request) {
   try {
@@ -29,6 +37,7 @@ export async function POST(req: Request) {
 
     const session = await composio.create(patientId, {
       manageConnections: false,
+      toolkits: ["gmail", "googlecalendar"],
       tools: {
         gmail: { disable: ["GMAIL_SEND_EMAIL", "GMAIL_SEND_DRAFT"] },
         googlecalendar: { disable: CALENDAR_WRITE_TOOLS_DISABLED },
@@ -42,7 +51,7 @@ export async function POST(req: Request) {
       system: NAVIGATOR_SYSTEM_PROMPT,
       messages: await convertToModelMessages(messages),
       tools,
-      stopWhen: stepCountIs(10),
+      stopWhen: stepCountIs(5),
     });
 
     return result.toUIMessageStreamResponse({

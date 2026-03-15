@@ -55,6 +55,7 @@ export async function GET(
   try {
     const session = await composio.create(patientId, {
       manageConnections: false,
+      toolkits: ["gmail", "googlecalendar"],
     });
     const { items } = await session.toolkits();
     const toolkits = await Promise.all(

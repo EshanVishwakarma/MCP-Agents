@@ -12,6 +12,7 @@ export async function GET() {
       try {
         const session = await composio.create(p.id, {
           manageConnections: false,
+          toolkits: ["gmail", "googlecalendar"],
         });
         const { items } = await session.toolkits();
         const connections = items.map((t) => ({

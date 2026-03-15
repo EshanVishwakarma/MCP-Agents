@@ -51,6 +51,7 @@ export async function GET(req: Request) {
     try {
       const session = await composio.create(flow.patientId, {
         manageConnections: false,
+        toolkits: ["gmail", "googlecalendar"],
       });
       const tools = await session.tools();
 

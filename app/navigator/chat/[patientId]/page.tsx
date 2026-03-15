@@ -44,6 +44,44 @@ function getDraftIdFromResult(result: unknown): string | null {
 const PROPOSE_CALENDAR_TOOLS = ["PROPOSE_CALENDAR_CREATE", "PROPOSE_CALENDAR_UPDATE", "PROPOSE_CALENDAR_PATCH", "PROPOSE_CALENDAR_DELETE"] as const;
 type CalendarAction = "create" | "update" | "patch" | "delete";
 
+const META_TOOL_NAMES = ["COMPOSIO_SEARCH_TOOLS", "COMPOSIO_MULTI_EXECUTE_TOOL", "COMPOSIO_REMOTE_WORKBENCH"];
+
+function isStreamlinedToolName(name: string): boolean {
+  const n = name.toUpperCase();
+  if (META_TOOL_NAMES.includes(n)) return true;
+  if (n.startsWith("GMAIL_FETCH") || n.startsWith("GMAIL_LIST") || n.startsWith("GMAIL_GET")) return true;
+  if (n.startsWith("GOOGLECALENDAR_LIST") || n === "GOOGLECALENDAR_GET_EVENT") return true;
+  return false;
+}
+
+/** True if this message has at least one tool part that renders as streamlined content (email/calendar cards or summary). */
+function messageHasStreamlinedToolOutput(parts: Array<{ type: string; toolInvocation?: { toolName?: string }; output?: unknown }>): boolean {
+  return parts.some((part) => {
+    if (part.type === "tool-invocation" && part.toolInvocation?.toolName) {
+      return isStreamlinedToolName(part.toolInvocation.toolName);
+    }
+    if (part.type.startsWith("tool-")) {
+      const name = part.type.replace(/^tool-/, "");
+      return isStreamlinedToolName(name);
+    }
+    return false;
+  });
+}
+
+/** Index of the last streamlined tool part in the message. We only show that one so the user sees the extended readout, not earlier partial ones. */
+function getLastStreamlinedToolPartIndex(parts: Array<{ type: string; toolInvocation?: { toolName?: string }; output?: unknown }>): number {
+  let last = -1;
+  parts.forEach((part, i) => {
+    if (part.type === "tool-invocation" && part.toolInvocation?.toolName && isStreamlinedToolName(part.toolInvocation.toolName)) {
+      last = i;
+    }
+    if (part.type.startsWith("tool-") && isStreamlinedToolName(part.type.replace(/^tool-/, ""))) {
+      last = i;
+    }
+  });
+  return last;
+}
+
 function getCalendarPendingFromResult(
   toolName: string,
   result: unknown
@@ -130,14 +168,34 @@ export default function NavigatorChatPage() {
                 {m.role === "user" ? "You" : "Assistant"}
               </span>
               <div className="flex flex-wrap items-center gap-2">
-                {(m.parts ?? []).length === 0 && m.role === "assistant" && (
-                  <span className="text-stone-400 italic">Waiting for response…</span>
-                )}
-                {(m.parts ?? []).map((part, i) => {
-                  if (part.type === "text") {
+                {(() => {
+                  const parts = m.parts ?? [];
+                  const lastStreamlinedIdx = getLastStreamlinedToolPartIndex(parts);
+                  return (
+                    <>
+                      {parts.length === 0 && m.role === "assistant" && (
+                        <span className="text-stone-400 italic">Waiting for response…</span>
+                      )}
+                      {parts.map((part, i) => {
+                        if (part.type === "text") {
+                          const rawText = String((part as { text?: string }).text ?? "");
+                          // Hide model text when we have tool output so we don't show misleading "no emails" / "tool metadata" lines.
+                          const hasAnyToolPart = parts.some(
+                            (p) => p.type === "tool-invocation" || (p.type && p.type.startsWith("tool-"))
+                          );
+                          const looksLikeNoEmailsMessage =
+                            /no emails|tool metadata|provided tool output|not actual email/i.test(rawText);
+                          if (
+                            m.role === "assistant" &&
+                            (messageHasStreamlinedToolOutput(parts) ||
+                              (hasAnyToolPart && looksLikeNoEmailsMessage))
+                          ) {
+                            return null;
+                          }
+                    if (!rawText.trim()) return null;
                     return (
                       <span key={i}>
-                        {String((part as { text?: string }).text ?? "")
+                        {rawText
                           .split(/(https?:\/\/[^\s)]+)/g)
                           .map((segment, j) =>
                             segment.match(/^https?:\/\//) ? (
@@ -200,6 +258,10 @@ export default function NavigatorChatPage() {
                         </div>
                       );
                     }
+                    // Only show the last streamlined (email/calendar) readout so we don't show an earlier short one plus the extended one
+                    if (isStreamlinedToolName(name) && i !== lastStreamlinedIdx) {
+                      return null;
+                    }
                     return (
                       <ToolCallDisplay
                         key={inv.toolCallId ?? `tool-${i}`}
@@ -255,6 +317,9 @@ export default function NavigatorChatPage() {
                         </div>
                       );
                     }
+                    if (isStreamlinedToolName(name) && i !== lastStreamlinedIdx) {
+                      return null;
+                    }
                     return (
                       <ToolCallDisplay
                         key={toolPart.toolCallId ?? i}
@@ -267,6 +332,9 @@ export default function NavigatorChatPage() {
                   }
                   return null;
                 })}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
