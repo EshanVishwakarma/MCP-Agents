@@ -148,7 +148,18 @@ export default function NavigatorChatPage() {
             </ul>
           </div>
         )}
-        {messages.map((m) => (
+        {messages.map((m, msgIndex) => {
+          const prevMsg = messages[msgIndex - 1];
+          const prevText = prevMsg
+            ? typeof (prevMsg as { content?: string }).content === "string"
+              ? (prevMsg as { content: string }).content
+              : ((prevMsg as { parts?: Array<{ type: string; text?: string }> }).parts ?? [])
+                  .map((p) => (p.type === "text" ? (p as { text?: string }).text ?? "" : ""))
+                  .join(" ")
+            : "";
+          const userAskedAboutCalendar =
+            prevMsg?.role === "user" && /calendar|schedule|event|upcoming/i.test(prevText);
+          return (
           <div
             key={m.id}
             className={`flex gap-3 ${
@@ -184,11 +195,14 @@ export default function NavigatorChatPage() {
                             (p) => p.type === "tool-invocation" || (p.type && p.type.startsWith("tool-"))
                           );
                           const looksLikeNoEmailsMessage =
-                            /no emails|tool metadata|provided tool output|not actual email/i.test(rawText);
+                            /no emails|no email list|tool metadata|provided tool output|not actual email|calendar operations.*not emails/i.test(rawText);
+                          const wrongReplyForCalendar =
+                            userAskedAboutCalendar && /no emails/i.test(rawText);
                           if (
                             m.role === "assistant" &&
                             (messageHasStreamlinedToolOutput(parts) ||
-                              (hasAnyToolPart && looksLikeNoEmailsMessage))
+                              (hasAnyToolPart && looksLikeNoEmailsMessage) ||
+                              wrongReplyForCalendar)
                           ) {
                             return null;
                           }
@@ -338,7 +352,8 @@ export default function NavigatorChatPage() {
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
         {isLoading && (
           <p className="text-sm text-stone-500 flex items-center gap-2">
             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-arul-purple/30 border-t-arul-purple" />

@@ -61,7 +61,8 @@ export function ToolCallDisplay({
     output !== undefined &&
     (isReadTool(toolName) || isMetaTool(toolName));
 
-  const apiToolName = requestEmailStructure ? "GMAIL_FETCH_EMAILS" : toolName;
+  // Send actual tool name so the API can choose calendar vs email from output content (meta tools can return either).
+  const apiToolName = toolName;
 
   useEffect(() => {
     if (!canClean || summary !== null || summaryLoading) return;

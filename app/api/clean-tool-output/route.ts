@@ -7,6 +7,67 @@ function isEmailTool(toolName: string): boolean {
   return n.startsWith("GMAIL_FETCH") || n.startsWith("GMAIL_LIST") || n.startsWith("GMAIL_GET");
 }
 
+const META_TOOLS = ["COMPOSIO_SEARCH_TOOLS", "COMPOSIO_MULTI_EXECUTE_TOOL", "COMPOSIO_REMOTE_WORKBENCH"];
+function isMetaTool(toolName: string): boolean {
+  return META_TOOLS.includes(toolName.toUpperCase());
+}
+
+/** Detect if output looks like email list (messages/emails with subject/from/snippet). */
+function looksLikeEmailOutput(output: unknown): boolean {
+  if (output == null || typeof output !== "object") return false;
+  const str = JSON.stringify(output);
+  if (/"messages"\s*:\s*\[|"emails"\s*:\s*\[/.test(str) && /"subject"|"from"|"snippet"|"body"/i.test(str)) return true;
+  const o = output as Record<string, unknown>;
+  const results = o.results ?? (o.data as Record<string, unknown>)?.results;
+  if (Array.isArray(results) && results.length > 0) {
+    const first = results[0] as Record<string, unknown>;
+    const out = first.output ?? first.data ?? first.result;
+    if (out != null && looksLikeEmailOutput(out)) return true;
+  }
+  return false;
+}
+
+/** Check if an array looks like calendar events (has start/end/summary). */
+function isCalendarEventArray(arr: unknown): boolean {
+  if (!Array.isArray(arr) || arr.length === 0) return false;
+  const first = arr[0];
+  if (first == null || typeof first !== "object") return false;
+  const keys = Object.keys(first as Record<string, unknown>);
+  const hasTime = keys.some((k) => /^start$|^end$|dateTime|date/i.test(k));
+  const hasSummary = keys.some((k) => /^summary$|description|location/i.test(k));
+  return hasTime && hasSummary;
+}
+
+/** Detect if output looks like Google Calendar data (events/items with start/end/summary). */
+function looksLikeCalendarOutput(output: unknown): boolean {
+  if (output == null || typeof output !== "object") return false;
+  const o = output as Record<string, unknown>;
+  const data = o.data ?? o.body ?? o;
+  if (data && typeof data === "object") {
+    const d = data as Record<string, unknown>;
+    if (isCalendarEventArray(d.items) || isCalendarEventArray(d.events)) return true;
+  }
+  if (isCalendarEventArray(o.items) || isCalendarEventArray(o.events)) return true;
+  const results = o.results ?? (o.data as Record<string, unknown>)?.results ?? o.output;
+  const arr = Array.isArray(results) ? results : undefined;
+  if (arr && arr.length > 0) {
+    for (const item of arr) {
+      if (item != null && typeof item === "object" && looksLikeCalendarOutput(item)) return true;
+      const rec = item as Record<string, unknown>;
+      const out = rec?.output ?? rec?.data ?? rec?.result;
+      if (out != null && looksLikeCalendarOutput(out)) return true;
+    }
+  }
+  const str = typeof output === "string" ? output : JSON.stringify(output);
+  if (str.length > 100000) return false;
+  const hasCalendarStructure = /"items"\s*:\s*\[|"events"\s*:\s*\[/.test(str);
+  const hasCalendarContent = /"summary"|"start"|"end"|"dateTime"|"date"|calendar#event|google\.com.*calendar/i.test(str);
+  const hasEmailList = /"messages"\s*:\s*\[|"emails"\s*:\s*\[/.test(str) && /"subject"|"from"|"snippet"/i.test(str);
+  if (hasCalendarStructure && hasCalendarContent && !hasEmailList) return true;
+  if (/calendar|GOOGLECALENDAR|list.*event/i.test(str) && hasCalendarContent && !hasEmailList) return true;
+  return false;
+}
+
 /** Extract email-like payload from Composio meta tool output (e.g. COMPOSIO_MULTI_EXECUTE_TOOL). */
 function extractEmailPayload(output: unknown): unknown {
   if (output == null) return output;
@@ -51,6 +112,10 @@ Rules:
 - Do not add medical advice or interpret clinical content.
 - If the data is empty or an error, say so plainly.`;
 
+const CALENDAR_SUMMARY_PROMPT = `You are helping a care coordinator view a patient's calendar. The following tool output contains Google Calendar event data (often under items[], or nested in results[0].output.data). Extract each event and list them clearly.
+
+For each event include: title (summary), date and time (from start/end), and location if present. Use bullet points or numbered list. Be concise. If there are no events, say "No upcoming events" or "No events in this range." Do not mention emails or email lists—this is calendar data only.`;
+
 const EMAIL_STRUCTURED_PROMPT = `You are helping a care coordinator view a patient's emails. From the raw tool output, extract each email (or thread) as a separate item.
 
 The output may be nested (e.g. inside results[0].output.data.messages, or data.messages, or similar). Look through the entire JSON for any array of email-like objects (with subject, from/sender, snippet, date, or body). Extract from wherever you find that list.
@@ -91,7 +156,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const useEmailStructure = isEmailTool(toolName);
+    const isCalendar = looksLikeCalendarOutput(output);
+    const useEmailStructure =
+      (isEmailTool(toolName) || (isMetaTool(toolName) && looksLikeEmailOutput(output))) && !isCalendar;
     const payload = useEmailStructure ? extractEmailPayload(output) : output;
     const payloadHasEmailList =
       payload &&
@@ -115,13 +182,14 @@ export async function POST(req: Request) {
       );
     }
 
+    const summaryPrompt = isCalendar ? CALENDAR_SUMMARY_PROMPT : CLEAN_PROMPT;
     const { text } = await generateText({
       model: google("gemini-2.5-flash"),
-      system: CLEAN_PROMPT,
+      system: summaryPrompt,
       prompt: `Tool: ${toolName}\n\nRaw output:\n${JSON.stringify(output, null, 2)}`,
     });
 
-    return new Response(JSON.stringify({ summary: text }), {
+    return new Response(JSON.stringify({ summary: text || (isCalendar ? "No events found." : "No summary."), emails: [] }), {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
